@@ -581,48 +581,471 @@ DISCONNECT → Remove socketId from Set; if Set empty, delete userId from Map
 
 ## 📄 4. Resume Bullet Points
 
+### ✅ 4-Bullet Version (Recommended — for tight resume space)
+
 ```
-📸 Instagram Clone — Full-Stack Social Media Application
-Tech: NestJS · TypeScript · PostgreSQL · TypeORM · React · Vite · RTK Query · Socket.IO · Cloudinary · Docker
+### 📸 Instagram Clone — Full-Stack Social Media App
+**Tech Stack:** NestJS, TypeScript, PostgreSQL, TypeORM, React, RTK Query, Socket.IO, Cloudinary, Docker
 
-• Architected a modular NestJS REST API with 10 feature modules (auth, posts, follows,
-  likes, comments, chat) following Separation of Concerns and Dependency Injection principles.
-
-• Implemented secure JWT authentication with dual-token rotation (access + refresh),
-  bcrypt password and refresh token hashing, httpOnly cookie delivery, and email OTP
-  verification with replay protection (isUsed flag + 5-minute expiry).
-
-• Built real-time one-on-one chat using Socket.IO WebSocket Gateway, tracking online
-  users via Map<userId, Set<socketId>> to support multi-tab sessions, with automatic
-  email fallback notifications for offline receivers via Nodemailer.
-
-• Integrated Cloudinary for cloud image storage using streaming uploads (Multer memory
-  buffer → upload_stream), with automatic image deletion on post removal to prevent
-  orphaned assets.
-
-• Wrote optimized TypeORM QueryBuilder queries for the social feed, computing like counts,
-  comment counts, and follow status via correlated subqueries in a single DB round-trip,
-  eliminating N+1 query problems.
-
-• Built the React frontend with RTK Query for declarative data fetching, automatic caching,
-  and tag-based cache invalidation across Posts, Comments, Follow, and Conversation slices.
-
-• Containerized the full stack (React/Nginx, NestJS, PostgreSQL 17) using Docker Compose
-  with persistent named volumes for database data and environment-based configuration.
+- Architected a modular NestJS REST API using Dependency Injection and Separation of Concerns, implementing authentication, posts, likes, comments, follows, and chat modules.
+- Implemented JWT access and refresh token authentication, bcrypt password hashing, httpOnly cookies, and email OTP verification with expiry and replay protection.
+- Developed real-time one-to-one chat using Socket.IO and implemented Nodemailer email notifications for offline recipients.
+- Built optimized social feed queries using TypeORM QueryBuilder to retrieve posts along with like counts, comment counts, and follow status; integrated Cloudinary image uploads and Docker Compose for full-stack containerization.
 ```
 
 ---
 
-## ⚠️ 5. Known Weaknesses & Improvements
+## ⚠️ 5. What's Wrong & How to Improve It
 
-| Issue | Current State | Better Approach |
-|---|---|---|
-| `synchronize: true` | Auto schema sync, dangerous in prod | Use TypeORM Migrations |
-| No feed pagination | `getAllPost()` returns everything | Add `LIMIT/OFFSET` or cursor-based pagination |
-| CORS `origin: '*'` on WebSocket | Accepts any origin | Restrict to frontend URL |
-| No OTP rate limiting | Can spam OTP requests | Add `@nestjs/throttler` |
-| No Socket message validation | `SendMessageDto` not class-validated | Add `ValidationPipe` in gateway |
-| No resend OTP endpoint | User stuck if OTP expires | Add `POST /auth/resend-otp` |
+> This section is based on a **line-by-line audit** of the actual source code. Each issue links to the exact file and explains the real impact.
+
+---
+
+### 🐛 Real Bugs Found in the Code
+
+---
+
+#### BUG 1 — `getProfile()` always returns `followers: 0` and `following: 0`
+
+**File**: `user.service.ts` lines 210-211
+
+```ts
+// ❌ WRONG — hardcoded zeros, never queries the DB
+return {
+  followers: 0,
+  following: 0,
+};
+```
+
+**Impact**: The logged-in user's own profile page always shows **0 followers and 0 following**, even if they have hundreds. There are *two* profile methods — `getProfile()` (for own profile) and `getUserProfile()` (for visiting another user). `getUserProfile()` correctly queries the follow counts, but `getProfile()` was never updated. Classic copy-paste omission.
+
+**Fix**:
+```ts
+// ✅ Query the DB like getUserProfile() does
+const followers = await this.followRepository.count({ where: { following: { id: userId } } });
+const following = await this.followRepository.count({ where: { follower: { id: userId } } });
+return { ...userData, followers, following };
+```
+
+---
+
+#### BUG 2 — Unused `OneToMany` import in `follow.entity.ts`
+
+**File**: `follow.entity.ts` line 6
+
+```ts
+// ❌ OneToMany is imported but NEVER used in this file
+import {
+  Entity, PrimaryGeneratedColumn, ManyToOne, CreateDateColumn,
+  OneToMany,  // ← dead import
+} from 'typeorm';
+```
+
+**Impact**: No runtime crash, but it's dead code that indicates `FollowEntity` was originally planned to have children (e.g., follow notifications) but never completed. Misleads future readers into thinking there's a relationship here.
+
+**Fix**: Remove `OneToMany` from the import statement.
+
+---
+
+#### BUG 3 — `auth.module.ts` declares `15m` expiry, but `auth.service.ts` issues **6-day** access tokens
+
+**File 1**: `auth.module.ts` line 34 | **File 2**: `auth.service.ts` line 156
+
+```ts
+// auth.module.ts — JwtModule default (says 15 minutes)
+signOptions: { expiresIn: '15m' }
+
+// auth.service.ts — per-call override (silently overrides to 6 days!)
+{ secret: process.env.JWT_ACCESS_SECRET, expiresIn: '6d' }
+```
+
+**Impact**: The module config says 15 minutes but tokens actually live **6 days**. A 6-day access token means if it's stolen via XSS, an attacker has 6 days of unrevokable access. Access tokens should be short-lived (15 min) and rely on the refresh token for silent renewal.
+
+**Fix**: Align both to `'15m'`. Implement the `baseQueryWithReauth` pattern on the frontend so RTK Query auto-refreshes when it gets a 401.
+
+---
+
+#### BUG 4 — `socket.ts` sets `socket = null` on disconnect, but components holding a reference get a dead socket
+
+**File**: `socket.ts` lines 20-22
+
+```ts
+socket.on("disconnect", () => {
+  socket = null;  // ← singleton is cleared
+});
+```
+
+**Impact**: If the socket disconnects (network blip, server restart), the singleton becomes `null`. However, if a component stored the socket reference from an earlier `connectSocket()` call, it now holds a **stale dead socket** and messages are silently dropped. Socket.IO's built-in reconnection is not being used.
+
+**Fix**: Rely on Socket.IO's built-in `reconnection: true` (default). Components should always read from the singleton function, not store the reference locally.
+
+---
+
+#### BUG 5 — `profileApi.ts` is a completely empty file
+
+**File**: `profileApi.ts` (0 bytes)
+
+**Impact**: Profile-related API calls are scattered across `authApi.ts` (mixing auth endpoints with profile queries like `getProfile` and `getUserProfile`). This is an unfinished architecture inconsistency — the file was created but never implemented.
+
+**Fix**: Either populate `profileApi.ts` with profile endpoints and move them out of `authApi.ts`, or delete it. Auth endpoints (register, login, logout) and profile endpoints (getProfile, updateProfile) should not live in the same API slice.
+
+---
+
+#### BUG 6 — `deletePost` uses a `DELETE` request with a JSON body
+
+**File**: `post.controller.ts` line 51 | `postApi.ts` lines 18-25
+
+```ts
+// Backend — DELETE with @Body() is non-RESTful
+@Delete('deletepost')
+async deletePost(@Body() body: { postId: string }) { ... }
+
+// Frontend — sending body on a DELETE request
+url: `/post/deletepost`, method: "DELETE", body: { postId }
+```
+
+**Impact**: `DELETE` requests with a body are technically allowed by HTTP but widely unsupported or ignored by proxies, CDNs (like Cloudflare), and some HTTP clients. This is also non-RESTful design — the resource ID should be in the URL path.
+
+**Fix**:
+```ts
+// ✅ RESTful — put the ID in the route param
+@Delete(':id')
+deletePost(@Param('id') postId: string, @Req() req: Request) { ... }
+
+// Frontend
+url: `/post/${postId}`, method: "DELETE"  // no body needed
+```
+
+---
+
+#### BUG 7 — Duplicate `@UseGuards(JwtGaurd)` on the same route in `chat.controller.ts`
+
+**File**: `chat.controller.ts` lines 17 and 28
+
+```ts
+@Controller("chat")
+@UseGuards(JwtGaurd)   // ← Applied at class level (covers ALL routes)
+export class ChatController {
+  ...
+  @Post("conversation")
+  @UseGuards(JwtGaurd)  // ← Redundant — already covered by the class-level guard
+  createConversation(...) { }
+}
+```
+
+**Impact**: No functional bug, but it's dead/redundant code. It confuses readers into thinking the class-level guard doesn't apply to this route specifically.
+
+**Fix**: Remove the method-level `@UseGuards(JwtGaurd)` from `createConversation`.
+
+---
+
+#### BUG 8 — `jwt.strategy.ts` has 50+ lines of dead commented-out code
+
+**File**: `jwt.strategy.ts` lines 30-78
+
+```ts
+// for frontend
+// import { Injectable } from "@nestjs/common";
+// ... (50+ lines of old strategy versions)
+```
+
+**Impact**: No runtime impact, but it's a code quality smell. Dead commented-out code creates noise in code reviews and makes the active logic harder to find. This is what `git log` is for.
+
+**Fix**: Delete all commented-out code below line 27.
+
+---
+
+### 🔐 Security Issues
+
+---
+
+#### SEC 1 — WebSocket CORS is `origin: '*'` (accepts any origin)
+
+**File**: `chat.gateway.ts` lines 17-21
+
+```ts
+@WebSocketGateway({
+  cors: { origin: '*' }  // ← allows ANY website to connect
+})
+```
+
+**Impact**: Any website in the world can open a WebSocket connection to your server. If they have a valid JWT (e.g., phishing attack), they can impersonate that user in real-time. In production this must be locked to your frontend domain.
+
+**Fix**:
+```ts
+@WebSocketGateway({
+  cors: { origin: process.env.FRONTEND_URL, credentials: true }
+})
+```
+
+---
+
+#### SEC 2 — No `ValidationPipe` applied globally in `main.ts`
+
+**File**: `main.ts`
+
+```ts
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.use(cookieParser());
+  app.enableCors({ ... });
+  // ← No app.useGlobalPipes(new ValidationPipe())
+  await app.listen(3000);
+}
+```
+
+**Impact**: Even though `LoginDto` has `@IsEmail()` and `@IsNotEmpty()` decorators, **they are never enforced** because `ValidationPipe` is not registered. Anyone can send `email: 12345` or `password: null` and the backend accepts it without complaint.
+
+**Fix**:
+```ts
+import { ValidationPipe } from '@nestjs/common';
+app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+```
+
+---
+
+#### SEC 3 — `RegisterDto` has zero `class-validator` decorators
+
+**File**: `Register.dto.ts`
+
+```ts
+export class RegisterDto {
+  name!: string;     // ← no @IsString(), no @MinLength()
+  email!: string;    // ← no @IsEmail()
+  username!: string; // ← no @IsAlphanumeric(), no length check
+  password!: string; // ← no @MinLength(8), no strength check
+}
+```
+
+**Impact**: Even after fixing SEC 2, `RegisterDto` would pass all garbage input without validation. A user can register with `email: "notanemail"`, `password: "a"`, or a numeric `name`.
+
+**Fix**: Add `class-validator` decorators to every field:
+```ts
+import { IsEmail, IsString, MinLength, Matches } from 'class-validator';
+export class RegisterDto {
+  @IsString() @MinLength(2) name!: string;
+  @IsEmail() email!: string;
+  @IsString() @MinLength(3) username!: string;
+  @IsString() @MinLength(8) password!: string;
+}
+```
+
+---
+
+#### SEC 4 — `PATCH /:id` and `DELETE /:id` on `user.controller.ts` have NO `@UseGuards`
+
+**File**: `user.controller.ts` lines 66-74
+
+```ts
+@Patch(':id')  // ← NO @UseGuards — anyone can update any user
+update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+  return this.userService.update(id, updateUserDto);
+}
+
+@Delete(':id')  // ← NO @UseGuards — anyone can delete any user
+remove(@Param('id') id: string) {
+  return this.userService.remove(id);
+}
+```
+
+**Impact**: 🚨 **Critical vulnerability.** Any unauthenticated HTTP request can update or delete any user account just by knowing their UUID. This effectively gives admin-level privileges to everyone.
+
+**Fix**: Add `@UseGuards(JwtGaurd)` AND verify the authenticated `req.user.id` matches the `:id` param before performing the operation.
+
+---
+
+#### SEC 5 — `findAll()` returns raw `UserEntity` including `password` hash and `refreshToken`
+
+**File**: `user.controller.ts` line 21 → `user.service.ts` line 170
+
+```ts
+async findAll() {
+  return await this.userRepository.find(); // returns everything including password & refreshToken
+}
+```
+
+**Impact**: Even with `@UseGuards`, all authenticated users can call `GET /user/getall` and receive every user's bcrypt password hash and hashed refresh token. While bcrypt hashes can't be reversed easily, this is an information disclosure vulnerability.
+
+**Fix**: Select only safe fields:
+```ts
+return await this.userRepository.find({
+  select: ['id', 'name', 'username', 'bio', 'profilePicture', 'createdAt']
+});
+```
+
+---
+
+### 🏗️ Architecture & Code Quality Issues
+
+---
+
+#### ARCH 1 — `getAllPost()` has no `ORDER BY` — feed order is non-deterministic
+
+**File**: `post.service.ts` line 65 (the `getRawMany()` call, no `.orderBy()`)
+
+```ts
+const posts = await this.postRepository
+  .createQueryBuilder("post")
+  // ... subqueries ...
+  .getRawMany();  // ← No ORDER BY — DB returns rows in undefined order
+```
+
+**Impact**: The feed is currently returned in roughly insertion order, but SQL makes **no guarantee** about row order without `ORDER BY`. After any DB reindex, VACUUM, or parallel inserts, the order can change arbitrarily. Note that `getUserPosts()` already uses `.orderBy("post.createdAt", "DESC")` correctly.
+
+**Fix**: Add `.orderBy("post.createdAt", "DESC")` to `getAllPost()`.
+
+---
+
+#### ARCH 2 — Post creation has no transaction — partial failure = orphaned Cloudinary images
+
+**File**: `post.service.ts` lines 223-245
+
+```ts
+// Upload images one by one (no transaction)
+for (const file of files) {
+  const uploadedImage = await this.cloudinaryService.uploadImage(file);
+  images.push({ url: uploadedImage.secure_url, publicId: uploadedImage.public_id });
+}
+// If this DB save throws, the Cloudinary images above are orphaned forever
+return await this.postRepository.save(post);
+```
+
+**Impact**: If 2 of 3 images upload to Cloudinary and then the DB save fails — those 2 images are permanently abandoned in Cloudinary (wasted storage you're billed for). The same partial-failure problem exists in `delete()` — if a Cloudinary delete fails mid-loop, the post is still removed from DB but some images linger in Cloudinary.
+
+**Fix**: Upload all images first. Wrap the DB operation in a `try/catch`. On failure, loop through the successfully uploaded images and call `cloudinaryService.deleteImage()` to roll back Cloudinary.
+
+---
+
+#### ARCH 3 — `sendMessage` fetches the sender from the DB twice per message
+
+**File**: `chat.service.ts` lines 118 and 123
+
+```ts
+async sendMessage(senderId, dto) {
+  // createConversation() fetches sender at line ~39
+  const conversation = await this.createConversation(senderId, dto.receiverId);
+  // Then fetches sender AGAIN here
+  const sender = await this.userRepository.findOne({ where: { id: senderId } });
+```
+
+**Impact**: Every sent message causes 2 redundant DB queries for the same user. In a chat-heavy app this adds unnecessary latency and DB load.
+
+**Fix**: Extract sender lookup before calling `createConversation()` and pass the entity down, or return the sender from `createConversation()`.
+
+---
+
+#### ARCH 4 — `getUserProfile()` makes 5 separate DB queries for one page load
+
+**File**: `user.service.ts` lines 96-165
+
+```ts
+const user = await this.userRepository.findOne(...);      // Query 1
+const posts = await this.postRepository.count(...);       // Query 2
+const followers = await this.followRepository.count(...); // Query 3
+const following = await this.followRepository.count(...); // Query 4
+const isFollowing = await this.followRepository.findOne(...); // Query 5
+```
+
+**Impact**: 5 sequential round-trips to the DB for a single profile view. Should be 1 `QueryBuilder` query with subqueries (same pattern already used successfully in `getAllPost()`).
+
+---
+
+#### ARCH 5 — Frontend `baseUrl` and socket URL are hardcoded to `localhost`
+
+**File**: `api.ts` line 7 | `socket.ts` line 10
+
+```ts
+baseUrl: "http://localhost:3000"   // api.ts
+socket = io("http://localhost:3000", ...)  // socket.ts
+```
+
+**Impact**: Works on your machine. Breaks in every other environment (Docker, staging, production, teammate's laptop) without a code rebuild.
+
+**Fix**: Use Vite environment variables:
+```ts
+// api.ts
+baseUrl: import.meta.env.VITE_API_URL
+
+// socket.ts
+socket = io(import.meta.env.VITE_API_URL, ...)
+```
+Create `.env` and `.env.production` files accordingly.
+
+---
+
+#### ARCH 6 — Docker Compose has no PostgreSQL health check — backend crashes on cold start
+
+**File**: `docker-compose.yml` lines 21-23
+
+```yaml
+depends_on:
+  - postgres  # waits for container START, not for Postgres to be READY
+```
+
+**Impact**: NestJS starts and tries to connect to PostgreSQL while PostgreSQL is still initializing its data directory. This causes `ECONNREFUSED` on the first `docker compose up` and the backend container crashes. You need to `docker compose restart backend` or get lucky with timing.
+
+**Fix**:
+```yaml
+# postgres service
+healthcheck:
+  test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME}"]
+  interval: 5s
+  retries: 5
+
+# backend service
+depends_on:
+  postgres:
+    condition: service_healthy
+```
+
+---
+
+#### ARCH 7 — `followUser` and `unfollowUser` mutations don't invalidate the `"Profile"` tag
+
+**File**: `followApi.ts` lines 11 and 19
+
+```ts
+followUser: builder.mutation({
+  invalidatesTags: ["Posts"],  // ← "Profile" missing — follower count stays stale
+}),
+unfollowUser: builder.mutation({
+  invalidatesTags: ["Posts"],  // ← same
+}),
+```
+
+**Impact**: When you follow or unfollow a user, the follower/following counts on the profile page **never update** until the user manually reloads, because the `"Profile"` RTK Query cache tag is never invalidated.
+
+**Fix**:
+```ts
+invalidatesTags: ["Posts", "Profile", "Follow"]
+```
+
+---
+
+### 📋 Summary Table
+
+| # | Severity | File | Issue | Impact |
+|---|---|---|---|---|
+| BUG 1 | 🔴 High | `user.service.ts:210` | `followers: 0` hardcoded in `getProfile()` | Own profile always shows 0 followers/following |
+| BUG 2 | 🟡 Low | `follow.entity.ts:6` | Unused `OneToMany` import | Dead / misleading code |
+| BUG 3 | 🔴 High | `auth.service.ts:156` | Access token lives 6 days | Stolen token usable for 6 days with no revocation |
+| BUG 4 | 🟠 Medium | `socket.ts:20` | Socket `null` on disconnect | Stale socket reference = silent message drops |
+| BUG 5 | 🟡 Low | `profileApi.ts` | Empty file | Profile APIs in wrong module (authApi) |
+| BUG 6 | 🟠 Medium | `post.controller.ts:51` | DELETE request with JSON body | Non-RESTful, breaks with some proxies & CDNs |
+| BUG 7 | 🟡 Low | `chat.controller.ts:28` | Duplicate `@UseGuards` decorator | Redundant dead code |
+| BUG 8 | 🟡 Low | `jwt.strategy.ts:30` | 50+ lines commented-out code | Code noise, confusing |
+| SEC 1 | 🔴 High | `chat.gateway.ts:19` | WebSocket CORS `origin: '*'` | Any site can open authenticated WS connections |
+| SEC 2 | 🔴 High | `main.ts` | No global `ValidationPipe` | All DTO validation silently skipped |
+| SEC 3 | 🔴 High | `Register.dto.ts` | No class-validator decorators | Garbage input accepted at registration |
+| SEC 4 | 🚨 Critical | `user.controller.ts:66` | No auth guard on `PATCH/DELETE :id` | Anyone can update or delete any user account |
+| SEC 5 | 🔴 High | `user.controller.ts:21` | `findAll()` returns password hashes | Sensitive data leak to all authenticated users |
+| ARCH 1 | 🟠 Medium | `post.service.ts:27` | Feed has no `ORDER BY` | Non-deterministic post order |
+| ARCH 2 | 🟠 Medium | `post.service.ts:223` | No transaction on post create | Cloudinary orphan images on DB failure |
+| ARCH 3 | 🟡 Low | `chat.service.ts:123` | Sender fetched from DB twice per message | Extra latency + DB load per message |
+| ARCH 4 | 🟡 Low | `user.service.ts:96` | 5 separate DB queries for one profile page | Avoidable performance overhead |
+| ARCH 5 | 🔴 High | `api.ts:7`, `socket.ts:10` | Hardcoded `localhost` URLs | Breaks in any deployed / non-local environment |
+| ARCH 6 | 🟠 Medium | `docker-compose.yml:21` | No PostgreSQL health check | Backend crashes on cold start, requires manual restart |
+| ARCH 7 | 🟠 Medium | `followApi.ts:11` | Follow mutations don't invalidate `"Profile"` tag | Follower counts stay stale until manual page reload |
 
 ---
 
@@ -630,9 +1053,11 @@ Tech: NestJS · TypeScript · PostgreSQL · TypeORM · React · Vite · RTK Quer
 
 - ✅ **Full-stack TypeScript** — consistent types across the entire codebase
 - ✅ **Real-time WebSocket** — most junior projects skip this entirely
-- ✅ **Dual-token auth** — shows security-first thinking
-- ✅ **OTP email verification** — real-world onboarding pattern
-- ✅ **Cloudinary + streaming upload** — external API integration
-- ✅ **Docker Compose** — full containerized deployment
-- ✅ **RTK Query** — modern React data fetching beyond basic `useEffect + axios`
-- ✅ **TypeORM QueryBuilder** — shows you can write complex SQL through an ORM
+- ✅ **Dual-token auth with bcrypt-hashed refresh token** — shows security-first thinking
+- ✅ **OTP email verification with replay protection** — real-world onboarding pattern
+- ✅ **Cloudinary + streaming upload via Multer memory buffer** — external API integration without touching disk
+- ✅ **Docker Compose full stack containerization** — deployable environment from day one
+- ✅ **RTK Query with tag-based cache invalidation** — modern React data fetching beyond basic `useEffect + axios`
+- ✅ **TypeORM QueryBuilder with correlated subqueries** — eliminates N+1 on the feed query
+- ✅ **Multi-tab socket support** via `Map<userId, Set<socketId>>` — thoughtful WebSocket architecture
+- ✅ **Idempotent `createConversation()`** — prevents duplicate conversations between the same two users
