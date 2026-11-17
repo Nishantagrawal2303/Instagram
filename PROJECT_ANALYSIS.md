@@ -757,7 +757,7 @@ export class ChatController {
 
 ### 🔐 Security Issues
 
----
+-- -
 
 #### SEC 1 — WebSocket CORS is `origin: '*'` (accepts any origin)
 
