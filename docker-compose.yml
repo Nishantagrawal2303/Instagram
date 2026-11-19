@@ -18,18 +18,17 @@ services:
       - ./.docker.env
     ports:
       - "3000:3000"
-    depends_on:
-      - postgres
 
-  postgres:
-    image: postgres:17
-    container_name: instagram-postgres
-    environment:
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+  # Optional local postgres service (commented out since Supabase is used)
+  # postgres:
+  #   image: postgres:17
+  #   container_name: instagram-postgres
+  #   environment:
+  #     POSTGRES_USER: ${DB_USERNAME}
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD}
+  #     POSTGRES_DB: ${DB_NAME}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
 
-volumes:
-  postgres_data:
+# volumes:
+#   postgres_data:

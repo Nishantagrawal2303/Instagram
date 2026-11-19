@@ -119,7 +119,7 @@ export class CommentService {
         return comment;
 
 
-    }
+    }   
 
     async editComment(
         commentId: string,
@@ -159,6 +159,8 @@ export class CommentService {
         if (comment.user.id !== userId) {
             throw new ForbiddenException('forbidden')
         }
+
+        
         await this.commentRepository.delete(comment.id)
         return { message: "comment deleted successfully" }
 
