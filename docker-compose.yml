@@ -2,17 +2,17 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: dockerfile
     container_name: instagram-frontend
     ports:
-      - "5173:80"
+     - "80:80"
     depends_on:
       - backend
 
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: dockerfile
     container_name: instagram-backend
     env_file:
       - ./.docker.env

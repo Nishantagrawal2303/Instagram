@@ -30,7 +30,7 @@ const LoginForm = () => {
       const res = await login(data).unwrap();
 
 
-      await window.cookieStore.set("accessToken", res.accessToken);
+      document.cookie = `accessToken=${encodeURIComponent(res.accessToken)}; path=/; SameSite=Lax`;
       setIsAuthenticated(true);
       navigate("/");
     } catch (error) {

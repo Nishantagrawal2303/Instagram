@@ -20,7 +20,7 @@ const MoreMenu = ({ onClose }: Props) => {
     try {
       await logout(undefined).unwrap();
 
-      await window.cookieStore.delete("accessToken");
+      document.cookie = "accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
 
       setIsAuthenticated(false);
 

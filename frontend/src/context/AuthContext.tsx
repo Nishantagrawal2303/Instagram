@@ -10,15 +10,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      const cookie = await window.cookieStore.get("accessToken");
+ useEffect(() => {
+  const checkAuth = () => {
+    const hasAccessToken = document.cookie
+      .split("; ")
+      .some((cookie) => cookie.startsWith("accessToken="));
 
-      setIsAuthenticated(!!cookie);
-    };
+    setIsAuthenticated(hasAccessToken);
+  };
 
-    checkAuth();
-  }, []);
+  checkAuth();
+}, []);
 
   return (
     <AuthContext.Provider

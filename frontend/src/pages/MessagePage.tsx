@@ -23,17 +23,20 @@ const MessagePage = () => {
   useEffect(() => {
     let activeSocket: any;
 
-    const connect = async () => {
-      const cookie = await window.cookieStore.get("accessToken");
+   const connect = () => {
+  const accessToken = document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith("accessToken="))
+    ?.split("=")[1];
 
-      if (!cookie?.value) {
-        return;
-      }
+  if (!accessToken) {
+    return;
+  }
 
-      activeSocket = connectSocket(cookie.value);
-    };
+  activeSocket = connectSocket(decodeURIComponent(accessToken));
+};
 
-    connect();
+connect();
 
     return () => {
       activeSocket?.disconnect();

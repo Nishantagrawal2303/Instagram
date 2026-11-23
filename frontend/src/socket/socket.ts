@@ -7,7 +7,7 @@ export const connectSocket = (accessToken: string) => {
     return socket;
   }
 
-  socket = io("http://localhost:3000", {
+  socket = io("/", {
     auth: {
       token: accessToken,
     },
