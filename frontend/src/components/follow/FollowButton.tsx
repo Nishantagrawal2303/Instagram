@@ -1,4 +1,5 @@
 import { useFollowUserMutation, useUnfollowUserMutation } from "../../services/followApi";
+import { useAuth } from "../../context/AuthContext";
 
 interface FollowButtonProps {
   userId: string;
@@ -9,38 +10,37 @@ const FollowButton = ({
   userId,
   isFollowing,
 }: FollowButtonProps) => {
-  const [followUser, { isLoading: followLoading }] =
-    useFollowUserMutation();
-
-  const [unfollowUser, { isLoading: unfollowLoading }] =
-    useUnfollowUserMutation();
+  const { requireAuth } = useAuth();
+  const [followUser, { isLoading: followLoading }] = useFollowUserMutation();
+  const [unfollowUser, { isLoading: unfollowLoading }] = useUnfollowUserMutation();
 
   const loading = followLoading || unfollowLoading;
 
-  const handleFollow = async () => {
-    try {
-      if (isFollowing) {
-        await unfollowUser(userId).unwrap();
-      } else {
-        await followUser(userId).unwrap();
+  const handleFollow = () => {
+    requireAuth(async () => {
+      try {
+        if (isFollowing) {
+          await unfollowUser(userId).unwrap();
+        } else {
+          await followUser(userId).unwrap();
+        }
+      } catch (error) {
+        console.error("Follow error:", error);
       }
-    } catch (error) {
-      console.error(error);
-    }
+    }, "Log in to follow accounts");
   };
 
   return (
     <button
       onClick={handleFollow}
       disabled={loading}
-      className={`rounded-md px-4 py-1 text-sm font-medium transition
-        ${
-          isFollowing
-            ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
-            : "bg-blue-500 text-white hover:bg-blue-600"
-        }`}
+      className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition active:scale-95 ${
+        isFollowing
+          ? "bg-gray-100 text-gray-800 hover:bg-gray-200"
+          : "bg-[#0095F6] text-white hover:bg-blue-600 shadow-2xs"
+      }`}
     >
-      {loading ? "Loading..." : isFollowing ? "Following" : "Follow"}
+      {loading ? "..." : isFollowing ? "Following" : "Follow"}
     </button>
   );
 };

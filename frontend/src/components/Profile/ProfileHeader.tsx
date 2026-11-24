@@ -2,7 +2,8 @@ import ProfileStats from "./ProfileStats";
 import ProfileBio from "./ProfileBio";
 import { useNavigate } from "react-router-dom";
 import { useCreateConversationMutation } from "../../services/conversationApi";
-
+import FollowButton from "../follow/FollowButton";
+import { useAuth } from "../../context/AuthContext";
 
 type Profile = {
   id: string;
@@ -23,23 +24,25 @@ type Props = {
   profile: Profile;
 };
 
-
 const ProfileHeader = ({ profile }: Props) => {
-  const navigate=useNavigate()
-  const [createConversation, { isLoading }] =
-  useCreateConversationMutation();
+  const navigate = useNavigate();
+  const { requireAuth } = useAuth();
+  const [createConversation, { isLoading }] = useCreateConversationMutation();
 
-  const handleMessage = async () => {
-  try {
-    await createConversation({
-      receiverId: profile.id,
-    }).unwrap();
+  const handleMessage = () => {
+    requireAuth(async () => {
+      try {
+        await createConversation({
+          receiverId: profile.id,
+        }).unwrap();
 
-    navigate(`/messages/${profile.id}`);
-  } catch (error) {
-    console.error(error);
-  }
-};
+        navigate(`/messages/${profile.id}`);
+      } catch (error) {
+        console.error("Message error:", error);
+      }
+    }, "Log in to send messages");
+  };
+
   return (
     <div className="mb-8 border-b border-gray-200 pb-8">
       <div className="flex flex-col gap-8 md:flex-row md:items-center">
@@ -49,11 +52,11 @@ const ProfileHeader = ({ profile }: Props) => {
             <img
               src={profile.profilePicture}
               alt={profile.name}
-              className="h-32 w-32 rounded-full object-cover border"
+              className="h-32 w-32 rounded-full object-cover border border-gray-200"
             />
           ) : (
-            <div className="flex h-32 w-32 items-center justify-center rounded-full bg-[#E8DDD3] text-4xl font-semibold text-[#6D5D50]">
-              {profile.name.charAt(0).toUpperCase()}
+            <div className="flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-tr from-amber-200 via-rose-200 to-purple-200 text-4xl font-semibold text-gray-700">
+              {profile.name?.charAt(0).toUpperCase()}
             </div>
           )}
         </div>
@@ -68,30 +71,31 @@ const ProfileHeader = ({ profile }: Props) => {
             following={profile.following}
           />
 
- <div>
-  {profile.isOwner ? (
-    <button
-      onClick={() => navigate("/edit-profile")}
-      className="rounded-lg bg-black px-6 py-2 text-sm font-medium text-white hover:bg-gray-800"
-    >
-      Edit Profile
-    </button>
-  ) : (
-    <div className="flex gap-3">
-      {/* <button className="rounded-lg bg-blue-500 px-6 py-2 text-sm font-medium text-white transition hover:bg-blue-600">
-        {profile.isFollowing ? "Following" : "Follow"}
-      </button> */}
+          <div>
+            {profile.isOwner ? (
+              <button
+                onClick={() => navigate("/edit-profile")}
+                className="rounded-lg bg-gray-100 px-6 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-200 transition"
+              >
+                Edit Profile
+              </button>
+            ) : (
+              <div className="flex items-center gap-3">
+                <FollowButton
+                  userId={profile.id}
+                  isFollowing={profile.isFollowing}
+                />
 
-      <button
-        onClick={handleMessage}
-        disabled={isLoading}
-        className="rounded-lg border border-gray-300 px-6 py-2 text-sm font-medium hover:bg-gray-100"
-      >
-        {isLoading ? "Opening..." : "Message"}
-      </button>
-    </div>
-  )}
-</div>
+                <button
+                  onClick={handleMessage}
+                  disabled={isLoading}
+                  className="rounded-lg bg-gray-100 px-5 py-1.5 text-xs font-semibold text-gray-800 transition hover:bg-gray-200 active:scale-95 disabled:opacity-50"
+                >
+                  {isLoading ? "Opening..." : "Message"}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

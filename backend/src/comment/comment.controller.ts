@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } fro
 import { CommentService } from './comment.service';
 
 import { JwtGaurd } from 'src/auth/Jwt.auth.guard';
+import { OptionalJwtAuthGuard } from 'src/auth/OptionalJwt.auth.guard';
 import { CreateCommentDto } from './dto/comment.dto';
 import { type Request } from 'express';
 import { UpdateCommentDto } from './dto/updateComment.dto';
@@ -12,11 +13,11 @@ export class CommentController {
   constructor(private readonly commentService: CommentService) {}
 
   @Get('/:postId')
-  @UseGuards(JwtGaurd)
+  @UseGuards(OptionalJwtAuthGuard)
   getComment(
     @Param('postId') postId:string,@Req() req:Request){
-      const user=req.user  as any 
-      return this.commentService.getAllComment(postId,user.id)
+      const user = req.user as any;
+      return this.commentService.getAllComment(postId, user?.id || null);
   }
 
  @Post('/:postId')

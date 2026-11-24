@@ -1,30 +1,15 @@
-// import React from 'react'
-// import { Outlet } from 'react-router-dom'
-// import Sidebar from './Sidebar'
-
-
-// const Layout = () => {
-//   return (
-//     <div className="flex min-h-screen">
-//   <Sidebar />
-//   <main className="flex-1">
-//     <Outlet />
-//   </main>
-// </div>
-//   )
-// }
-
-// export default Layout
-
 import { Outlet } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import MobileFooter from "./MobileFooter";
-
+import MobileTopBar from "./MobileTopBar";
 
 const Layout = () => {
   return (
     <div className="min-h-screen bg-white">
-      {/* Desktop Sidebar */}
+      {/* Mobile Top Bar */}
+      <MobileTopBar />
+
+      {/* Desktop Sidebar + Main Content */}
       <div className="hidden md:flex">
         <Sidebar />
 
@@ -33,7 +18,7 @@ const Layout = () => {
         </main>
       </div>
 
-      {/* Mobile */}
+      {/* Mobile Main Content + Bottom Nav */}
       <div className="md:hidden">
         <main className="pb-20">
           <Outlet />

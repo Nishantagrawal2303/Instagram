@@ -135,8 +135,9 @@ async getUserProfile(
   });
 
 
-  const isFollowing =
-    await this.followRepository.findOne({
+  let isFollowing = false;
+  if (currentUserId) {
+    const followRecord = await this.followRepository.findOne({
       where: {
         follower: {
           id: currentUserId,
@@ -146,7 +147,8 @@ async getUserProfile(
         },
       },
     });
-
+    isFollowing = !!followRecord;
+  }
 
   return {
     id: user.id,
@@ -160,8 +162,8 @@ async getUserProfile(
     followers,
     following,
     
-    isFollowing: !!isFollowing,
-    isOwner: currentUserId === user.id,
+    isFollowing,
+    isOwner: Boolean(currentUserId && currentUserId === user.id),
   };
 }
 

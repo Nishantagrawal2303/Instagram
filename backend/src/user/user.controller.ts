@@ -3,6 +3,7 @@ import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtGaurd } from 'src/auth/Jwt.auth.guard';
+import { OptionalJwtAuthGuard } from 'src/auth/OptionalJwt.auth.guard';
 import { type Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -50,7 +51,7 @@ export class UserController {
 
   
 
-  @UseGuards(JwtGaurd)
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(":id")
   getUserProfile(
     @Param("id") id: string,
@@ -60,7 +61,7 @@ export class UserController {
 
     return this.userService.getUserProfile(
       id,
-      user.id,
+      user?.id || null,
     );
   }
   @Patch(':id')
