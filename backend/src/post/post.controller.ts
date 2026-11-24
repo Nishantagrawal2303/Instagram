@@ -3,6 +3,7 @@ import { PostService } from './post.service';
 import { CreatePostDto } from './dto/createPost.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { JwtGaurd } from 'src/auth/Jwt.auth.guard';
+import { OptionalJwtAuthGuard } from 'src/auth/OptionalJwt.auth.guard';
 import { type Request } from 'express';
 import { Multer } from 'multer';
 
@@ -14,9 +15,10 @@ export class PostController {
 constructor(private readonly postservice:PostService){}
 
 @Get("getallPost")
-@UseGuards(JwtGaurd)
-getAllPost(@Req() req){
-  return this.postservice.getAllPost(req.user.id)
+@UseGuards(OptionalJwtAuthGuard)
+getAllPost(@Req() req: Request){
+  const user = req.user as any;
+  return this.postservice.getAllPost(user?.id || null);
 }
 
 @Post("create")
@@ -33,7 +35,7 @@ createPost(
 }
 
 
-@UseGuards(JwtGaurd)
+@UseGuards(OptionalJwtAuthGuard)
 @Get("user/:id")
 getUserPosts(
   @Param("id") userId: string,

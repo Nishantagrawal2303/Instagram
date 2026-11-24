@@ -63,7 +63,7 @@ export class CommentService {
 
     user_username: comment.user.username,
 
-    isOwner: comment.user.id === userId,
+    isOwner: Boolean(userId && comment.user.id === userId),
 
    replies: comment.replies.map((reply) => ({
   id: reply.id,
@@ -71,7 +71,7 @@ export class CommentService {
   createdAt: reply.createdAt,
   user_name: reply.user.name,
   user_username: reply.user.username,
-  isOwner: reply.user.id === userId,
+  isOwner: Boolean(userId && reply.user.id === userId),
 
   replies: [], 
 })),

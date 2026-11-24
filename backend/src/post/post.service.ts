@@ -53,14 +53,18 @@ async getAllPost(currentUserId: string) {
     }, "commentCount")
 
     .addSelect((qb) => {
-      return qb
+      const sub = qb
         .select("COUNT(*)")
-        .from(FollowEntity, "follow")
-        .where("follow.follower.id = :currentUserId")
-        .andWhere("follow.following.id = user.id");
+        .from(FollowEntity, "follow");
+      if (currentUserId) {
+        return sub
+          .where("follow.follower.id = :currentUserId")
+          .andWhere("follow.following.id = user.id");
+      }
+      return sub.where("1 = 0");
     }, "isFollowing")
 
-    .setParameter("currentUserId", currentUserId)
+    .setParameter("currentUserId", currentUserId || "00000000-0000-0000-0000-000000000000")
 
     .getRawMany();
 
@@ -77,8 +81,8 @@ async getAllPost(currentUserId: string) {
     likeCount: Number(post.likeCount),
     commentCount: Number(post.commentCount),
 
-    isFollowing: Number(post.isFollowing) > 0,
-    isOwner: post.user_id === currentUserId,
+    isFollowing: currentUserId ? Number(post.isFollowing) > 0 : false,
+    isOwner: currentUserId ? post.user_id === currentUserId : false,
   }));
 }
 
